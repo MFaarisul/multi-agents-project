@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Env
+.env
+
+# OS
+.DS_Store
+
+# Reports
+*.pdf
+*.png
+
+# Derived artifacts (local stand-in for S3: extracted doc images, reports)
+temp_storage/*
+!temp_storage/rag_images/
+!temp_storage/rag_images/.gitkeep

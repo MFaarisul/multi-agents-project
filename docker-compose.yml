@@ -1,0 +1,105 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: analytics_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secretpassword}
+      POSTGRES_DB: ${POSTGRES_DB:-analytics_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./resources/sql/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-analytics_db}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  vector_db:
+    image: chromadb/chroma:0.5.23
+    container_name: chroma_db
+    restart: unless-stopped
+    environment:
+      - IS_PERSISTENT=TRUE
+      - ANONYMIZED_TELEMETRY=FALSE
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ingestion_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ingestion_worker
+    command: python -m ingestion.pipeline
+    depends_on:
+      vector_db:
+        condition: service_healthy
+    environment:
+      - CHROMA_HOST=vector_db
+      - CHROMA_PORT=8000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # VLM captioning of extracted images at ingestion time
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_VLM_MODEL=${LLM_VLM_MODEL:-haiku-4.5}
+    volumes:
+      # RAG corpus lives on the host — adding documents needs no image rebuild
+      - ./resources/rag:/app/resources/rag
+      # Extracted document images (mimics an S3 bucket prefix)
+      - ./temp_storage/rag_images:/app/temp_storage/rag_images
+      # Model cache volume: Docling layout/TableFormer, EasyOCR and BGE models
+      # auto-download to ~/.cache (root's home) on first run and persist here.
+      - hf_cache:/root/.cache
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_app
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8080
+    ports:
+      - "8080:8080"
+    volumes:
+      # Generated PDF reports persist on the host and are downloadable via
+      # GET /api/v1/reports/{filename}
+      - ./temp_storage/reports:/tmp/reports
+      # Ingested document images — served read-only by GET /api/v1/rag-images
+      - ./temp_storage/rag_images:/app/temp_storage/rag_images:ro
+      # Shared model cache (BGE embed + reranker + docling/OCR models from the
+      # ingestion worker) — avoids re-downloading on app recreation
+      - hf_cache:/root/.cache
+    depends_on:
+      ingestion_worker:
+        condition: service_completed_successfully
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
+      # Container-to-container hosts must be the compose service names,
+      # NOT ${POSTGRES_HOST}/${CHROMA_HOST} (those resolve to "localhost"
+      # from .env, which points at the container itself).
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - CHROMA_HOST=vector_db
+      - CHROMA_PORT=8000
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+
+volumes:
+  pgdata:
+  chroma_data:
+  hf_cache:

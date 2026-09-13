@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "multi-agent-enterprise-intelligence"
+version = "0.1.0"
+description = "Multi-Agent Enterprise Intelligence System with LangGraph, FastAPI, PostgreSQL, and ChromaDB"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "langgraph>=0.2.0",
+    "langgraph-checkpoint-postgres>=2.0.0",
+    "langchain-core>=0.2.0",
+    "langchain-openai>=0.1.20",
+    "psycopg[binary]>=3.1.18",
+    "psycopg-pool>=3.2.1",
+    "SQLAlchemy>=2.0.0",
+    "chromadb==0.5.23",
+    "rank-bm25>=0.2.2",
+    # docling <2.31 uses the docling-layout-beetle layout model (rt_detr v1),
+    # which works with transformers 4.46.x — the newest transformers that
+    # chromadb 0.5.23's tokenizers<=0.20.3 ceiling allows. Do not bump past
+    # 2.31 without also upgrading chromadb (tokenizers conflict).
+    "docling>=2.25.0,<2.31.0",
+    "docling-core[chunking]>=2.32.0,<2.45.0",
+    "sentence-transformers>=3.0",
+    "easyocr>=1.7",
+    "fpdf2>=2.8.0",
+    "matplotlib>=3.8.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "python-dotenv>=1.0.0",
+    # Declared directly (they are transitive deps of docling/sentence-transformers)
+    # so that [tool.uv.sources] can route them to the CPU-only index. Without
+    # this, the lock resolves CUDA torch + ~2-3GB of NVIDIA wheels.
+    "torch>=2.7.0",
+    "torchvision>=0.22.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "httpx>=0.27.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "ingestion*"]
+
+# CPU-only torch: route torch/torchvision to the PyTorch CPU index instead of
+# PyPI (whose linux wheels bundle ~2-3GB of NVIDIA libraries).
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

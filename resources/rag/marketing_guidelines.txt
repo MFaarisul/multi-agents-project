@@ -1,0 +1,11 @@
+Marketing Spend Guidelines
+
+Budget Allocation
+- No single campaign may exceed 50% of the total quarterly budget.
+- The 'Organic' channel is excluded from spend caps.
+- ROI = (revenue attributed to campaign) / (campaign spent).
+
+Reporting
+- Campaigns are grouped by quarter (Q1-Q4) and campaign_year.
+- A campaign is considered underperforming if spent exceeds 90% of budget
+  while attributed revenue is below 2x the spend.

@@ -1,0 +1,16 @@
+Eligibility
+- Refunds are available for orders with order_status = 'completed' requested
+  within 30 days of the order created_at date.
+- Subscriptions are non-refundable once the billing cycle has started, except
+  in cases of billing error.
+- The Enterprise plan tier is eligible for prorated refunds on cancellation.
+
+Processing
+- All refunds must be recorded in the refunds table with the original order_id.
+- The amount must not exceed the original order amount.
+- The associated order must be updated to order_status = 'refunded' once the
+  refund is issued.
+
+Reasons
+- Acceptable reasons: 'Customer dissatisfaction', 'Accidental duplicate
+  purchase', 'Billing error', 'Service downgrade'.

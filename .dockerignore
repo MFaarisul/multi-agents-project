@@ -1,0 +1,14 @@
+# Secrets — never bake into the image (config reads env vars from compose)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+.git/
