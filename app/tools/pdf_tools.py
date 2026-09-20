@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 from fpdf import FPDF
 from fpdf.fonts import FontFace
 
+from app.core.utils import strip_gateway_noise
+
 OUTPUT_DIR = os.environ.get("PDF_OUTPUT_DIR", os.path.join(tempfile.gettempdir(), "reports"))
 
 # Apex Dynamics brand palette
@@ -42,10 +44,6 @@ _FORMAT_LABELS = re.compile(r"^\s*(concise_text|markdown_table)\s*:\s*$", re.MUL
 _ECHOED_HEADINGS = re.compile(
     r"^\s*\d*\.?\s*(Executive Summary|Key Findings)\s*$", re.MULTILINE | re.IGNORECASE
 )
-_GATEWAY_NOISE = re.compile(
-    r"^.*(Andrej Karpathy|multica-ai|karpathy-skills).*$|^\s*\xF0\x9F\x92\xA1.*$",
-    re.MULTILINE,
-)
 
 
 def _clean(text: str) -> str:
@@ -58,7 +56,7 @@ def _clean(text: str) -> str:
     t = _MD_SEPARATOR_ROW.sub("", t)
     t = _MD_TABLE_LINE.sub("", t)
     t = _FORMAT_LABELS.sub("", t)
-    t = _GATEWAY_NOISE.sub("", t)
+    t = strip_gateway_noise(t)
     t = _ECHOED_HEADINGS.sub("", t)
     t = re.sub(r"\n{3,}", "\n\n", t)
     return _UNSAFE_CHARS.sub("", t).strip()

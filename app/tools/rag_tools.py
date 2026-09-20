@@ -5,21 +5,21 @@ import threading
 
 import chromadb
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
 from rank_bm25 import BM25Okapi
+from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from app.core.config import settings
+from app.schemas.tools import RAGQueryInput
+
 
 EMBED_MODEL_ID = "BAAI/bge-small-en-v1.5"
 RERANK_MODEL_ID = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-# BGE models expect this instruction prefix on the QUERY side for passage
-# retrieval (the ingestion side embeds without it).
-BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: "
+BGE_QUERY_PREFIX = "Represent this sentence for searching relevant passages: " #BGE models expect this instruction prefix on the QUERY (check the docs)
 
 # Hybrid retrieval configuration
-CANDIDATES_PER_RETRIEVER = 10  # over-fetch per retriever before fusion
+CANDIDATES_PER_RETRIEVER = 10
 RRF_K = 60  # standard RRF smoothing constant (Cormack et al., 2009)
-IMAGE_TOP_K = 3  # dense image-channel hits returned per query
+IMAGE_TOP_K = 3
 
 _STOPWORDS = frozenset(
     "a an the is are was were be been being of to in on at for with and or not it "
@@ -30,37 +30,8 @@ _STOPWORDS = frozenset(
 def _tokenize(text: str) -> list[str]:
     return [t for t in re.findall(r"[a-z0-9]+", text.lower()) if t not in _STOPWORDS]
 
-
-# --- Lazy singletons ----------------------------------------------------------
-
-_embed_model = None
-_embed_lock = threading.Lock()
-
-
-def _get_embed_model():
-    global _embed_model
-    if _embed_model is None:
-        with _embed_lock:
-            if _embed_model is None:
-                from sentence_transformers import SentenceTransformer
-
-                _embed_model = SentenceTransformer(EMBED_MODEL_ID)
-    return _embed_model
-
-
-_reranker = None
-_reranker_lock = threading.Lock()
-
-
-def _get_reranker():
-    global _reranker
-    if _reranker is None:
-        with _reranker_lock:
-            if _reranker is None:
-                from sentence_transformers import CrossEncoder
-
-                _reranker = CrossEncoder(RERANK_MODEL_ID)
-    return _reranker
+_embed_model = SentenceTransformer(EMBED_MODEL_ID)
+_reranker = CrossEncoder(RERANK_MODEL_ID)
 
 
 _bm25_cache: dict = {"count": None, "index": None, "ids": [], "docs": [], "metas": []}
@@ -95,8 +66,7 @@ def _get_collection():
 
 
 def _query_embedding(query: str) -> list[float]:
-    model = _get_embed_model()
-    return model.encode(
+    return _embed_model.encode(
         BGE_QUERY_PREFIX + query, normalize_embeddings=True
     ).tolist()
 
@@ -177,17 +147,11 @@ def _rrf_fuse(rankings: list[list[dict]]) -> list[dict]:
 
 
 def _rerank(query: str, candidates: list[dict]) -> list[dict]:
-    model = _get_reranker()
     pairs = [(query, c["doc"]) for c in candidates]
-    scores = model.predict(pairs)
+    scores = _reranker.predict(pairs)
     for cand, score in zip(candidates, scores):
         cand["rerank_score"] = float(score)
     return sorted(candidates, key=lambda x: x["rerank_score"], reverse=True)
-
-
-class RAGQueryInput(BaseModel):
-    query: str = Field(description="Semantic query string to search inside ChromaDB.")
-    n_results: int = Field(default=3, description="Number of document chunks to retrieve.")
 
 
 @tool("query_vector_store", args_schema=RAGQueryInput)

@@ -6,9 +6,7 @@ import os
 from app.core.state import SystemState
 from app.tools.rag_tools import query_vector_store
 
-# Adaptive image surfacing: keep up to IMAGE_MAX image hits, dropping any
-# whose dense cosine distance exceeds the best hit by more than
-# IMAGE_DISTANCE_MARGIN — "adaptive" because clearly-worse figures drop out.
+
 IMAGE_MAX = 3
 IMAGE_DISTANCE_MARGIN = 0.2
 

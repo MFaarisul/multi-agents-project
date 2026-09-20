@@ -44,6 +44,11 @@ services:
     depends_on:
       vector_db:
         condition: service_healthy
+    # Shared Settings (app.core.config) requires the full key set; the
+    # environment block below overrides the localhost values with the
+    # container-network service names.
+    env_file:
+      - .env
     environment:
       - CHROMA_HOST=vector_db
       - CHROMA_PORT=8000
@@ -82,6 +87,8 @@ services:
     depends_on:
       ingestion_worker:
         condition: service_completed_successfully
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:${POSTGRES_PORT}/${POSTGRES_DB}
       # Container-to-container hosts must be the compose service names,

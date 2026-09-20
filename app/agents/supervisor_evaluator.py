@@ -2,24 +2,18 @@ from __future__ import annotations
 
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.core.state import SystemState
-from app.core.structured_output import parse_json_model
+from app.schemas.decisions import EvaluatorDecision
 
 llm = ChatOpenAI(model=settings.llm_model, temperature=0, api_key=settings.llm_api_key, base_url=settings.llm_base_url)
 
 
-class EvaluatorDecision(BaseModel):
-    """Structured decision produced by the supervisor evaluator LLM."""
-    requires_sql_data: bool = Field(
-        description=(
-            "True if structured SQL data from the database is still needed to "
-            "answer the user's query after reviewing the retrieved RAG context. "
-            "False if the RAG context alone is sufficient."
-        )
-    )
+# Function-calling mode: the decision arrives on the tool_calls channel,
+# immune to gateway-injected notice lines / reasoning text in content.
+# (The gateway ignores response_format — langchain's default method.)
+structured_llm = llm.with_structured_output(EvaluatorDecision, method="function_calling")
 
 
 EVALUATOR_PROMPT = """You are the Supervisor Evaluator in an Enterprise AI Analytics engine.
@@ -42,9 +36,6 @@ User query:
 
 Retrieved RAG context:
 {rag_context}
-
-Respond with ONLY this JSON object, no other text, fields in this exact order:
-{{"requires_sql_data": false}}
 """
 
 
@@ -54,8 +45,7 @@ async def node(state: SystemState) -> dict:
     rag_context = state.get("business_rules") or "None"
 
     prompt = EVALUATOR_PROMPT.format(query=query, rag_context=rag_context)
-    response = await llm.ainvoke([SystemMessage(content=prompt)])
-    decision = parse_json_model(response.content, EvaluatorDecision)
+    decision = await structured_llm.ainvoke([SystemMessage(content=prompt)])
 
     return {
         "requires_sql_data": decision.requires_sql_data,

@@ -1,39 +1,20 @@
 from __future__ import annotations
 
-from typing import Literal
-
 from langchain_core.messages import SystemMessage, trim_messages
 from langchain_openai import ChatOpenAI
-from pydantic import BaseModel, Field
 
 from app.core.state import SystemState
 from app.core.config import settings
-from app.core.structured_output import parse_json_model
-
-llm = ChatOpenAI(model=settings.llm_model, temperature=0, api_key=settings.llm_api_key, base_url=settings.llm_base_url)
+from app.schemas.decisions import SupervisorDecision
 
 
-class SupervisorDecision(BaseModel):
-    """Structured routing decision produced by the supervisor LLM."""
-    requires_rag_context: bool = Field(
-        description=(
-            "True if unstructured document/glossary retrieval (RAG) is needed "
-            "to answer the query."
-        )
-    )
-    requires_sql_data: bool = Field(
-        description=(
-            "True if structured SQL data from the database is needed to "
-            "answer the query."
-        )
-    )
-    output_mode: Literal["concise_text", "markdown_table", "pdf_report"] = Field(
-        description=(
-            "concise_text for quick factual or conversational answers, "
-            "markdown_table when the user wants data in a table or breakdown, "
-            "pdf_report when the user explicitly asks for a report or detailed document."
-        )
-    )
+llm = ChatOpenAI(
+    model=settings.llm_model,
+    temperature=0,
+    api_key=settings.llm_api_key,
+    base_url=settings.llm_base_url,
+)
+structured_llm = llm.with_structured_output(SupervisorDecision, method="function_calling")
 
 
 SYSTEM_PROMPT = """You are the Supervisor Agent in an Enterprise AI Analytics engine.
@@ -57,27 +38,20 @@ If neither is needed, it's a general Q&A question.
 Greetings, small talk, tests ("test", "hello"), thanks, and general light
 conversation are general Q&A: set both requires_rag_context and
 requires_sql_data to False.
-
-Respond with ONLY this JSON object, no other text, fields in this exact order:
-{"requires_rag_context": false, "requires_sql_data": false, "output_mode": "concise_text"}
 """
 
 
 async def supervisor_node(state: SystemState) -> dict:
-    """Intent analysis via prompt-declared JSON output — no hardcoded keywords."""
-    # token_counter=len counts MESSAGES, not tokens — this caps the prompt
-    # at the last 20 conversation turns.
-    trimmed_history = trim_messages(
-        state["messages"],
-        max_tokens=20,
+    messages = trim_messages(
+        state.get("messages", []),
+        max_tokens=50,
         strategy="last",
         token_counter=len,
         start_on="human",
     )
 
-    prompt = [SystemMessage(content=SYSTEM_PROMPT)] + trimmed_history
-    response = await llm.ainvoke(prompt)
-    decision = parse_json_model(response.content, SupervisorDecision)
+    prompt = [SystemMessage(content=SYSTEM_PROMPT)] + messages
+    decision = await structured_llm.ainvoke(prompt)
 
     return {
         "requires_sql_data": decision.requires_sql_data,
@@ -87,13 +61,6 @@ async def supervisor_node(state: SystemState) -> dict:
 
 
 def route(state: SystemState) -> str:
-    """Conditional-edge router after the supervisor.
-
-    RAG or SQL queries enter the Context Phase (qa_rag) first.
-    General Q&A / small talk goes to smalltalk (terminal).
-    The supervisor never sends anything directly to text_to_sql; that
-    decision belongs to the supervisor_evaluator after RAG retrieval.
-    """
     if state.get("requires_rag_context") or state.get("requires_sql_data"):
         return "qa_rag"
     return "smalltalk"

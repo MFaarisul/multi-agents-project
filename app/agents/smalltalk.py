@@ -6,6 +6,7 @@ from langchain_openai import ChatOpenAI
 from app.core.config import settings
 from app.core.state import SystemState
 
+
 llm = ChatOpenAI(
     model=settings.llm_model,
     temperature=0,
@@ -14,7 +15,7 @@ llm = ChatOpenAI(
 )
 
 DIRECT_PROMPT = """You are Mica, the friendly conversational agent of an
-Enterprise AI Analytics platform.
+Apex Dynamics platform.
 
 You handle light, non-complex conversation:
 - Small talk: greetings, "test", "how are you", thanks, jokes, goodbyes
@@ -38,9 +39,6 @@ Scope:
 
 
 async def node(state: SystemState) -> dict:
-    """Small talk + light conversation — terminal (bypasses synthesis)."""
-    # token_counter=len counts MESSAGES, not tokens — this caps the prompt
-    # at the last 20 conversation turns.
     messages = trim_messages(
         state.get("messages", []),
         max_tokens=20,

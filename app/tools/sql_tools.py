@@ -2,10 +2,10 @@ import json
 import re
 
 from langchain_core.tools import tool
-from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
 
 from app.core.config import settings
+from app.schemas.tools import SQLExecutionInput
 
 engine = create_engine(
     settings.readonly_db_uri,
@@ -34,10 +34,6 @@ _FORBIDDEN_KEYWORDS = (
 _FORBIDDEN_RE = re.compile(
     r"\b(" + "|".join(_FORBIDDEN_KEYWORDS) + r")\b", re.IGNORECASE
 )
-
-
-class SQLExecutionInput(BaseModel):
-    query: str = Field(description="Strict read-only SQL query to run.")
 
 
 @tool("execute_read_only_sql", args_schema=SQLExecutionInput)

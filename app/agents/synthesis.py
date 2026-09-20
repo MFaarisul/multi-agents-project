@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
 from app.core.state import SystemState
+from app.core.utils import strip_gateway_noise
 from app.tools.pdf_tools import render_bar_chart, render_pdf
 
 llm = ChatOpenAI(model=settings.llm_model, temperature=0, api_key=settings.llm_api_key, base_url=settings.llm_base_url)
@@ -105,22 +106,16 @@ Rules:
   subscriptions "active" unless the data says so). Do not invent figures.
 """
 
-# Lines injected by some inference gateways into model completions — never
-# let them reach users or reports.
-_NOISE_PATTERNS = (
-    re.compile(r"^.*Andrej Karpathy.*$", re.MULTILINE),
-    re.compile(r"^.*multica-ai.*$", re.MULTILINE),
-    re.compile(r"^.*karpathy-skills.*$", re.MULTILINE),
-    re.compile(r"^\s*💡.*$", re.MULTILINE),
-    # Residual format labels the model may echo despite the prompt
+# Residual format labels the model may echo despite the prompt
+_FORMAT_LABEL_PATTERNS = (
     re.compile(r"^\s*\*{0,2}(concise_text|markdown_table|Summary)\*{0,2}\s*:?\s*$", re.MULTILINE | re.IGNORECASE),
 )
 
 
 def _strip_noise(text: str) -> str:
     """Remove gateway-injected notice lines and format labels from model output."""
-    cleaned = text or ""
-    for pattern in _NOISE_PATTERNS:
+    cleaned = strip_gateway_noise(text)
+    for pattern in _FORMAT_LABEL_PATTERNS:
         cleaned = pattern.sub("", cleaned)
     return cleaned.strip()
 

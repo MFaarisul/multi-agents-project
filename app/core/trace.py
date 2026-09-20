@@ -1,11 +1,7 @@
-"""Per-request execution tracing for the agent graph.
-
+"""
 Emits one combined log line per graph node (total duration + chronological
 breakdown of the LLM calls and tool runs inside it), plus a final arrow
 summary:  input -> supervisor (2.31s) -> … -> output | total 17.59s
-
-Usage: create one handler per request and pass it in the LangGraph config —
-LangGraph propagates it to every node and nested LLM/tool run automatically.
 """
 
 import logging
